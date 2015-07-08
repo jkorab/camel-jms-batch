@@ -1,17 +1,13 @@
 package org.apache.camel.component.jms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.broker.BrokerService;
 import org.apache.activemq.camel.component.ActiveMQComponent;
-import org.apache.activemq.usage.MemoryUsage;
-import org.apache.activemq.usage.SystemUsage;
 import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
 import org.apache.camel.spring.spi.SpringTransactionPolicy;
-import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.commons.lang.time.StopWatch;
 import org.junit.*;
 import org.slf4j.Logger;
@@ -27,50 +23,37 @@ import static org.junit.Assert.assertTrue;
 /**
  * @author jkorab
  */
-public class JmsBatchComponentTest extends CamelTestSupport {
-    private final Logger LOG = LoggerFactory.getLogger(JmsBatchComponentTest.class);
+public class JmsBatchConsumerTest extends BrokerTestSupport {
+    public static final String PROPAGATION_REQUIRED = "PROPAGATION_REQUIRED";
+    private final Logger LOG = LoggerFactory.getLogger(JmsBatchConsumerTest.class);
 
-    private final static long MB = 1024 * 1024;
-    private static BrokerService brokerService;
-
-    @BeforeClass
-    public static void startBroker() throws Exception {
-        brokerService = new BrokerService();
-        brokerService.setBrokerId("localhost");
-        brokerService.setBrokerName("localhost");
-        brokerService.setPersistent(false);
-        SystemUsage systemUsage = new SystemUsage();
-        {
-            MemoryUsage memoryUsage = new MemoryUsage();
-            memoryUsage.setLimit(32 * MB);
-            systemUsage.setMemoryUsage(memoryUsage);
-        }
-        brokerService.setSystemUsage(systemUsage);
-        brokerService.start();
-    }
+    @Rule
+    public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
 
     private SimpleRegistry registry;
 
     @Override
     public CamelContext createCamelContext() throws Exception {
-        registry = new SimpleRegistry();
+        SimpleRegistry registry = new SimpleRegistry();
         registry.put("testStrategy", new ListAggregationStrategy());
-        CamelContext context = new DefaultCamelContext(registry);
-        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("vm://localhost");
-
-        ActiveMQComponent activeMQComponent = new ActiveMQComponent();
-        activeMQComponent.setConnectionFactory(connectionFactory);
-        context.addComponent("activemq", activeMQComponent);
+        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
 
         // set up transactions to enable faster sends
         JmsTransactionManager transactionManager = new JmsTransactionManager(connectionFactory);
 
+        ActiveMQComponent activeMQComponent = new ActiveMQComponent();
+        activeMQComponent.setConnectionFactory(connectionFactory);
+        activeMQComponent.setTransactionManager(transactionManager);
+
         SpringTransactionPolicy policy = new SpringTransactionPolicy(transactionManager);
-        policy.setPropagationBehaviorName("PROPAGATION_REQUIRED");
-        registry.put("PROPAGATION_REQUIRED", policy);
+        policy.setPropagationBehaviorName(PROPAGATION_REQUIRED);
+        registry.put(PROPAGATION_REQUIRED, policy);
 
         JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
         jmsBatchComponent.setConnectionFactory(connectionFactory);
+
+        CamelContext context = new DefaultCamelContext(registry);
+        context.addComponent("jms", activeMQComponent);
         context.addComponent("batchjms", jmsBatchComponent);
         return context;
     }
@@ -78,11 +61,6 @@ public class JmsBatchComponentTest extends CamelTestSupport {
     @Override
     public boolean isUseAdviceWith() {
         return true;
-    }
-
-    @AfterClass
-    public static void stopBroker() throws Exception {
-        brokerService.stop();
     }
 
     @Test(expected = org.apache.camel.FailedToCreateProducerException.class)
@@ -111,7 +89,7 @@ public class JmsBatchComponentTest extends CamelTestSupport {
                         "&completionSize=100" +
                         "&jmsConsumers=" + jmsConsumerCount +
                         "&concurrentConsumers=" + concurrentConsumers +
-                        "&aggregationStrategyRef=testStrategy").routeId("batchConsumer").startupOrder(10)
+                        "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
                     .wireTap("mock:batches")
                     .split(body())
                         .to("mock:split")
@@ -158,7 +136,7 @@ public class JmsBatchComponentTest extends CamelTestSupport {
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
                 from("batchjms:" + queueName +
-                        "?completionSize=" + batchSize + "&aggregationStrategyRef=testStrategy").routeId("batchConsumer").startupOrder(10)
+                        "?completionSize=" + batchSize + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
                         .log("${body.size}")
                         .to("mock:batches");
             }
@@ -181,7 +159,7 @@ public class JmsBatchComponentTest extends CamelTestSupport {
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
                 from("batchjms:" + queueName +
-                        "?completionTimeout=" + completionTimeout + "&aggregationStrategyRef=testStrategy").routeId("batchConsumer").startupOrder(10)
+                        "?completionTimeout=" + completionTimeout + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
                         .to("mock:batches");
             }
         });
@@ -211,10 +189,11 @@ public class JmsBatchComponentTest extends CamelTestSupport {
         @Override
         public void configure() throws Exception {
             from("direct:in").routeId("harness").startupOrder(20)
-                    .transacted("PROPAGATION_REQUIRED")
-                    .split(body())
+                // FIXME this transacted part isn't working for some reason
+                //.transacted(PROPAGATION_REQUIRED)
+                .split(body())
                     .to("mock:before")
-                    .to("activemq:queue:" + queueName)
+                    .to("jms:queue:" + queueName)
                 .end();
         }
     }

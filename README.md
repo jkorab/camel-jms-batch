@@ -14,7 +14,7 @@ Instantiate the component:
 
 Then use it within an consumer endpoint as follows:
 
-    <from uri="jmsBatch:{{queueName}}?aggregationStrategyRef=myAggregationStrategy"/>
+    <from uri="jmsBatch:{{queueName}}?aggregationStrategy=#myAggregationStrategy"/>
 
 The following attributes are optional:
 

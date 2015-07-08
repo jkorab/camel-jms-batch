@@ -5,6 +5,7 @@ import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
+import org.apache.camel.processor.aggregate.AggregationStrategy;
 
 /**
  * @author jkorab
@@ -20,7 +21,7 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
     private int jmsConsumers = 1;
     private Integer completionSize = DEFAULT_COMPLETION_SIZE;
     private Integer completionTimeout = DEFAULT_COMPLETION_TIMEOUT;
-    private String aggregationStrategyRef;
+    private AggregationStrategy aggregationStrategy;
 
     public JmsBatchEndpoint() {}
 
@@ -44,12 +45,12 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
         return new JmsBatchConsumer(this, processor);
     }
 
-    public String getAggregationStrategyRef() {
-        return aggregationStrategyRef;
+    public AggregationStrategy getAggregationStrategy() {
+        return aggregationStrategy;
     }
 
-    public void setAggregationStrategyRef(String aggregationStrategyRef) {
-        this.aggregationStrategyRef = aggregationStrategyRef;
+    public void setAggregationStrategy(AggregationStrategy aggregationStrategy) {
+        this.aggregationStrategy = aggregationStrategy;
     }
 
     public Integer getCompletionSize() {

@@ -63,11 +63,9 @@ public class JmsBatchConsumer extends DefaultConsumer {
         JmsBatchComponent jmsBatchComponent = (JmsBatchComponent) jmsBatchEndpoint.getComponent();
         connectionFactory = jmsBatchComponent.getConnectionFactory();
 
-        String aggregationStrategyRef = jmsBatchEndpoint.getAggregationStrategyRef();
-        Validate.notEmpty(aggregationStrategyRef, "aggregationStrategyRef is empty");
-        CamelContext camelContext = jmsBatchComponent.getCamelContext();
-        this.aggregationStrategy = (AggregationStrategy) camelContext.getRegistry().lookup(aggregationStrategyRef);
-        Validate.notNull(aggregationStrategy, "No AggregationStrategy found matching " + aggregationStrategyRef);
+        AggregationStrategy aggregationStrategy = jmsBatchEndpoint.getAggregationStrategy();
+        Validate.notNull(aggregationStrategy, "aggregationStrategy is null");
+        this.aggregationStrategy = aggregationStrategy;
 
         int concurrentConsumers = jmsBatchEndpoint.getConcurrentConsumers();
         Validate.isTrue(concurrentConsumers > 0, "concurrentConsumers must be greater than 0");
