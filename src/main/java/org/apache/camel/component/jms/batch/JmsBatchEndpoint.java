@@ -16,7 +16,6 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
     public static final String PROPERTY_BATCH_SIZE = "BatchJms.batchSize";
 
     private String queueName;
-    private String integrationName;
     private int concurrentConsumers = 1;
     private int jmsConsumers = 1;
     private Integer completionSize = DEFAULT_COMPLETION_SIZE;
@@ -25,10 +24,9 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
 
     public JmsBatchEndpoint() {}
 
-    public JmsBatchEndpoint(String endpointUri, Component component, String remaining, String integrationName) {
+    public JmsBatchEndpoint(String endpointUri, Component component, String remaining) {
         super(endpointUri, component);
         this.queueName = remaining;
-        this.integrationName = integrationName;
     }
 
     @Override
@@ -94,7 +92,4 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
         this.jmsConsumers = jmsConsumers;
     }
 
-    public String getIntegrationName() {
-        return integrationName;
-    }
 }

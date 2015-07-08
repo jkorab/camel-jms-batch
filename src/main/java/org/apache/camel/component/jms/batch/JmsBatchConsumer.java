@@ -45,12 +45,9 @@ public class JmsBatchConsumer extends DefaultConsumer {
     private final String queueName;
     private final Processor processor;
     private ExecutorService executorService;
-    private String integrationName;
 
     public JmsBatchConsumer(JmsBatchEndpoint jmsBatchEndpoint, Processor processor) {
         super(jmsBatchEndpoint, processor);
-
-        this.integrationName = jmsBatchEndpoint.getIntegrationName();
 
         Validate.notNull(jmsBatchEndpoint, "batchJmsEndpoint is null");
         this.jmsBatchEndpoint = jmsBatchEndpoint;

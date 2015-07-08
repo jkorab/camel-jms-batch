@@ -17,8 +17,6 @@ public class JmsBatchComponent extends DefaultComponent {
 
     private ConnectionFactory connectionFactory;
 
-    private String integrationName;
-
     public JmsBatchComponent() {
     }
 
@@ -29,8 +27,7 @@ public class JmsBatchComponent extends DefaultComponent {
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
         Validate.notNull(connectionFactory);
-        Validate.notNull(integrationName);
-        JmsBatchEndpoint jmsBatchEndpoint = new JmsBatchEndpoint(uri, this, remaining, integrationName);
+        JmsBatchEndpoint jmsBatchEndpoint = new JmsBatchEndpoint(uri, this, remaining);
         setProperties(jmsBatchEndpoint, parameters);
         return jmsBatchEndpoint;
     }
@@ -41,10 +38,6 @@ public class JmsBatchComponent extends DefaultComponent {
 
     public void setConnectionFactory(ConnectionFactory connectionFactory) {
         this.connectionFactory = connectionFactory;
-    }
-
-    public void setIntegrationName(String integrationName) {
-        this.integrationName = integrationName;
     }
 
 }
