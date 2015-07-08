@@ -71,7 +71,6 @@ public class JmsBatchComponentTest extends CamelTestSupport {
 
         JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
         jmsBatchComponent.setConnectionFactory(connectionFactory);
-        jmsBatchComponent.setIntegrationName("UnittestBatchIntegration");
         context.addComponent("batchjms", jmsBatchComponent);
         return context;
     }
