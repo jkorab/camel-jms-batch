@@ -1,10 +1,10 @@
 package org.apache.camel.component.jms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.component.sjms.SjmsComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
 import org.apache.camel.test.junit4.CamelTestSupport;
@@ -28,15 +28,15 @@ public class JmsBatchEndpointTest extends CamelTestSupport {
         ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory();
         connectionFactory.setBrokerURL(broker.getTcpConnectorUri());
 
-        ActiveMQComponent amq = new ActiveMQComponent();
-        amq.setConnectionFactory(connectionFactory);
+        SjmsComponent sjmsComponent = new SjmsComponent();
+        sjmsComponent.setConnectionFactory(connectionFactory);
 
-        JmsBatchComponent jmsBatch = new JmsBatchComponent();
-        jmsBatch.setConnectionFactory(connectionFactory);
+        JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
+        jmsBatchComponent.setConnectionFactory(connectionFactory);
 
         CamelContext context = new DefaultCamelContext(registry);
-        context.addComponent("jmsBatch", jmsBatch);
-        context.addComponent("jms", amq);
+        context.addComponent("jmsBatch", jmsBatchComponent);
+        context.addComponent("jms", sjmsComponent);
 
         return context;
     }

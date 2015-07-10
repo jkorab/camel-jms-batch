@@ -9,8 +9,6 @@ import javax.jms.ConnectionFactory;
 import java.util.Map;
 
 /**
- * Customized JMS component that is responsible for consuming from a queue in batches. It should be considered as
- * a combination of
  * @author jkorab
  */
 public class JmsBatchComponent extends DefaultComponent {

@@ -1,36 +1,31 @@
 package org.apache.camel.component.jms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.component.sjms.SjmsComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
-import org.apache.camel.spring.spi.SpringTransactionPolicy;
 import org.apache.commons.lang.time.StopWatch;
-import org.junit.*;
+import org.junit.Rule;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jms.connection.JmsTransactionManager;
 
 import javax.jms.ConnectionFactory;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import static org.junit.Assert.assertTrue;
 
 /**
  * @author jkorab
  */
 public class JmsBatchConsumerTest extends BrokerTestSupport {
-    public static final String PROPAGATION_REQUIRED = "PROPAGATION_REQUIRED";
     private final Logger LOG = LoggerFactory.getLogger(JmsBatchConsumerTest.class);
 
     @Rule
     public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
-
-    private SimpleRegistry registry;
 
     @Override
     public CamelContext createCamelContext() throws Exception {
@@ -38,22 +33,14 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         registry.put("testStrategy", new ListAggregationStrategy());
         ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
 
-        // set up transactions to enable faster sends
-        JmsTransactionManager transactionManager = new JmsTransactionManager(connectionFactory);
-
-        ActiveMQComponent activeMQComponent = new ActiveMQComponent();
-        activeMQComponent.setConnectionFactory(connectionFactory);
-        activeMQComponent.setTransactionManager(transactionManager);
-
-        SpringTransactionPolicy policy = new SpringTransactionPolicy(transactionManager);
-        policy.setPropagationBehaviorName(PROPAGATION_REQUIRED);
-        registry.put(PROPAGATION_REQUIRED, policy);
+        SjmsComponent sjmsComponent = new SjmsComponent();
+        sjmsComponent.setConnectionFactory(connectionFactory);
 
         JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
         jmsBatchComponent.setConnectionFactory(connectionFactory);
 
         CamelContext context = new DefaultCamelContext(registry);
-        context.addComponent("jms", activeMQComponent);
+        context.addComponent("jms", sjmsComponent);
         context.addComponent("batchjms", jmsBatchComponent);
         return context;
     }
@@ -129,7 +116,6 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
 
     @Test
     public void testConsumption_completionSize() throws Exception {
-        // FIXME hidden problem - using completionInterval
         final int batchSize = 5;
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
@@ -189,11 +175,9 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         @Override
         public void configure() throws Exception {
             from("direct:in").routeId("harness").startupOrder(20)
-                // FIXME this transacted part isn't working for some reason
-                //.transacted(PROPAGATION_REQUIRED)
                 .split(body())
                     .to("mock:before")
-                    .to("jms:queue:" + queueName)
+                    .toF("jms:queue:%s?transacted=true", queueName)
                 .end();
         }
     }

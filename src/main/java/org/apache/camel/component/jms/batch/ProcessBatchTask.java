@@ -54,7 +54,6 @@ class ProcessBatchTask implements Runnable {
                     session.rollback();
                 } catch (JMSException e) {
                     LOG.error("Exception caught while rolling back: {}", ExceptionUtils.getStackTrace(e));
-                    LOG.error(ExceptionUtils.getStackTrace(e));
                     throw new RuntimeException(e);
                 }
             }
