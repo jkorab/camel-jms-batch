@@ -63,7 +63,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
     @Test
     public void testConsumption() throws Exception {
 
-        final int messageCount = 5000;
+        final int messageCount = 50000;
         final int jmsConsumerCount = 1;
         final int concurrentConsumers = 5;
 
@@ -73,10 +73,10 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
             public void configure() throws Exception {
                 from("batchjms:" + queueName +
                         "?completionTimeout=200" +
-                        "&completionSize=100" +
+                        "&completionSize=1000" +
                         "&jmsConsumers=" + jmsConsumerCount +
                         "&concurrentConsumers=" + concurrentConsumers +
-                        "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
+                        "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10).autoStartup(false)
                     .wireTap("mock:batches")
                     .split(body())
                         .to("mock:split")
@@ -93,14 +93,16 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         MockEndpoint mockSplit = getMockEndpoint("mock:split");
         mockSplit.setExpectedMessageCount(messageCount);
 
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start();
         LOG.info("Sending messages");
         template.sendBody("direct:in", generatePojos(messageCount));
         LOG.info("Send complete");
 
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        context.startRoute("batchConsumer");
         assertMockEndpointsSatisfied();
         stopWatch.stop();
+
         long time = stopWatch.getTime();
         LOG.info("Processed {} messages in {} ms", messageCount, time);
         LOG.info("Average throughput {} msg/s", messageCount / (time / 1000));
