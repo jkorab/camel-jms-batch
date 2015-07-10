@@ -63,7 +63,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
     @Test
     public void testConsumption() throws Exception {
 
-        final int messageCount = 50000;
+        final int messageCount = 20000;
         final int jmsConsumerCount = 1;
         final int concurrentConsumers = 5;
 
