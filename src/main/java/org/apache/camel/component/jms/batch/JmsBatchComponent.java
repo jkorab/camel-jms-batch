@@ -1,8 +1,7 @@
 package org.apache.camel.component.jms.batch;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
-import org.apache.camel.impl.DefaultComponent;
+import org.apache.camel.impl.UriEndpointComponent;
 import org.apache.commons.lang.Validate;
 
 import javax.jms.ConnectionFactory;
@@ -11,15 +10,12 @@ import java.util.Map;
 /**
  * @author jkorab
  */
-public class JmsBatchComponent extends DefaultComponent {
+public class JmsBatchComponent extends UriEndpointComponent {
 
     private ConnectionFactory connectionFactory;
 
     public JmsBatchComponent() {
-    }
-
-    public JmsBatchComponent(CamelContext camelContext) {
-        super(camelContext);
+        super(JmsBatchEndpoint.class);
     }
 
     @Override

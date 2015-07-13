@@ -32,7 +32,7 @@ public class JmsBatchConsumer extends DefaultConsumer {
     private final int completionTimeout;
     private final int jmsConsumers;
     private final ConnectionFactory connectionFactory;
-    private final String queueName;
+    private final String destinationName;
     private final Processor processor;
     private ExecutorService executorService;
 
@@ -44,8 +44,8 @@ public class JmsBatchConsumer extends DefaultConsumer {
         Validate.notNull(processor, "processor is null");
         this.processor = processor;
 
-        queueName = jmsBatchEndpoint.getQueueName();
-        Validate.notEmpty(queueName, "queueName is empty");
+        destinationName = jmsBatchEndpoint.getDestinationName();
+        Validate.notEmpty(destinationName, "destinationName is empty");
 
         completionSize = jmsBatchEndpoint.getCompletionSize();
         completionTimeout = jmsBatchEndpoint.getCompletionTimeout();
@@ -73,10 +73,21 @@ public class JmsBatchConsumer extends DefaultConsumer {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicReference<CountDownLatch> consumersShutdownLatchRef = new AtomicReference<>();
 
+    private Connection connection;
+
     @Override
     protected void doStart() throws Exception {
         super.doStart();
-        LOG.info("Starting consumer for {}:{}", queueName, completionSize);
+        // start up a shared connection
+        try {
+            connection = connectionFactory.createConnection();
+            connection.start();
+        } catch (JMSException ex) {
+            LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(ex));
+            return;
+        }
+
+        LOG.info("Starting {} consumer(s) for {}:{}", jmsConsumers, destinationName, completionSize);
         consumersShutdownLatchRef.set(new CountDownLatch(jmsConsumers));
         ExecutorService jmsConsumerExecutors = Executors.newFixedThreadPool(jmsConsumers);
         for (int i = 0; i < jmsConsumers; i++) {
@@ -96,24 +107,24 @@ public class JmsBatchConsumer extends DefaultConsumer {
         } else {
             LOG.info("Stop signalled while there are no consumers yet, so no need to wait for consumers");
         }
+
+        try {
+            LOG.debug("Shutting down connection");
+            connection.close();
+        } catch (JMSException jex) {
+            LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(jex));
+        }
     }
 
     private class BatchConsumptionLoop implements Runnable {
         @Override
         public void run() {
-            final Connection connection;
-            try {
-                connection = connectionFactory.createConnection();
-                connection.start();
-            } catch (JMSException ex) {
-                LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(ex));
-                return;
-            }
             try {
                 batchConsumption: while(running.get()) {
                     // a batch corresponds to a single session that will be committed or rolled back by a background thread
                     final Session session = connection.createSession(TRANSACTED, Session.CLIENT_ACKNOWLEDGE);
-                    Queue queue = session.createQueue(queueName + "?consumer.prefetchSize=1000");
+                    // TODO destinationName only creates queues
+                    Queue queue = session.createQueue(destinationName);
                     MessageConsumer consumer = session.createConsumer(queue);
 
                     int messageCount = 0;
@@ -176,14 +187,8 @@ public class JmsBatchConsumer extends DefaultConsumer {
                     executorService.submit(new ProcessBatchTask(processor, aggregatedExchange, session));
                 }
             } catch (Exception ex) {
-                LOG.error("Exception caught consuming from {}: {}", queueName, ExceptionUtils.getStackTrace(ex));
+                LOG.error("Exception caught consuming from {}: {}", destinationName, ExceptionUtils.getStackTrace(ex));
             } finally {
-                LOG.info("Shutting down");
-                try {
-                    connection.close();
-                } catch (JMSException jex) {
-                    LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(jex));
-                }
                 // indicate that we have shut down
                 CountDownLatch consumersShutdownLatch = consumersShutdownLatchRef.get();
                 consumersShutdownLatch.countDown();
