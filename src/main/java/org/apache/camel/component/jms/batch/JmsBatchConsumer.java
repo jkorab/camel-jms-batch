@@ -56,12 +56,12 @@ public class JmsBatchConsumer extends DefaultConsumer {
         this.aggregationStrategy = ObjectHelper.notNull(aggregationStrategy, "aggregationStrategy");
 
         concurrentConsumers = jmsBatchEndpoint.getConcurrentConsumers();
-        if (concurrentConsumers > 0) {
+        if (concurrentConsumers <= 0) {
             throw new IllegalArgumentException("concurrentConsumers must be greater than 0");
         }
 
         jmsConsumers = jmsBatchEndpoint.getJmsConsumers();
-        if (jmsConsumers > 0) {
+        if (jmsConsumers <= 0) {
             throw new IllegalArgumentException("jmsConsumers must be greater than 0");
         }
     }

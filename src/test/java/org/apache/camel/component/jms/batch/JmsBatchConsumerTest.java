@@ -2,12 +2,13 @@ package org.apache.camel.component.jms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
+import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.sjms.SjmsComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
-import org.apache.commons.lang.time.StopWatch;
+import org.apache.camel.util.StopWatch;
 import org.junit.Rule;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -77,11 +78,11 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
                         "&jmsConsumers=" + jmsConsumerCount +
                         "&concurrentConsumers=" + concurrentConsumers +
                         "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10).autoStartup(false)
-                    .wireTap("mock:batches")
-                    .split(body())
+                        .wireTap("mock:batches")
+                        .split(body())
                         .to("mock:split")
                         .stop()
-                    .end();
+                        .end();
             }
         });
         context.start();
@@ -98,14 +99,12 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         LOG.info("Send complete");
 
         StopWatch stopWatch = new StopWatch();
-        stopWatch.start();
         context.startRoute("batchConsumer");
         assertMockEndpointsSatisfied();
-        stopWatch.stop();
+        long time = stopWatch.stop();
 
-        long time = stopWatch.getTime();
         LOG.info("Processed {} messages in {} ms", messageCount, time);
-        LOG.info("Average throughput {} msg/s", messageCount / (time / 1000));
+        LOG.info("Average throughput {} msg/s", (long) (messageCount / (time / 1000d)));
     }
 
     private Pojo[] generatePojos(int messageCount) {
@@ -125,7 +124,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
             public void configure() throws Exception {
                 from("batchjms:" + queueName +
                         "?completionSize=" + batchSize + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
-                        .log("${body.size}")
+                        .log(LoggingLevel.DEBUG, "${body.size}")
                         .to("mock:batches");
             }
         });

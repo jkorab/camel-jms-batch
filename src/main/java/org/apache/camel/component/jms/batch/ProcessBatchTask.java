@@ -3,7 +3,6 @@ package org.apache.camel.component.jms.batch;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.spi.Synchronization;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +41,7 @@ class ProcessBatchTask implements Runnable {
                     LOG.debug("Committing");
                     session.commit();
                 } catch (JMSException e) {
-                    LOG.error("Exception caught while committing: {}", ExceptionUtils.getStackTrace(e));
+                    LOG.error("Exception caught while committing: {}", e.getMessage());
                     throw new RuntimeException(e);
                 }
             }
@@ -53,7 +52,7 @@ class ProcessBatchTask implements Runnable {
                     LOG.debug("Rolling back");
                     session.rollback();
                 } catch (JMSException e) {
-                    LOG.error("Exception caught while rolling back: {}", ExceptionUtils.getStackTrace(e));
+                    LOG.error("Exception caught while rolling back: {}", e.getMessage());
                     throw new RuntimeException(e);
                 }
             }
@@ -62,7 +61,7 @@ class ProcessBatchTask implements Runnable {
             processor.process(aggregatedExchange);
             LOG.debug("Completed processing[{}]:total={}", id, messagesProcessed.addAndGet(batchSize));
         } catch (Exception e) {
-            LOG.error("Error processing exchange: {}", ExceptionUtils.getStackTrace(e));
+            LOG.error("Error processing exchange: {}", e.getMessage());
             throw new RuntimeException(e);
         }
     }

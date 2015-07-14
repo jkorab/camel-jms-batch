@@ -3,7 +3,6 @@ package org.apache.camel.component.jms.batch;
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.commons.lang.Validate;
 
 import javax.jms.ConnectionFactory;
 import java.util.Map;

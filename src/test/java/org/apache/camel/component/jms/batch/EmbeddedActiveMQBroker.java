@@ -3,7 +3,6 @@ package org.apache.camel.component.jms.batch;
 import org.apache.activemq.broker.BrokerService;
 import org.apache.activemq.store.memory.MemoryPersistenceAdapter;
 import org.apache.camel.test.AvailablePortFinder;
-import org.apache.commons.lang.Validate;
 import org.junit.rules.ExternalResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +18,9 @@ public class EmbeddedActiveMQBroker extends ExternalResource {
     private final String tcpConnectorUri;
 
     public EmbeddedActiveMQBroker(String brokerId) {
-        Validate.notEmpty(brokerId, "brokerId is empty");
+        if ((brokerId == null) || (brokerId.isEmpty())) {
+            throw new IllegalArgumentException("brokerId is empty");
+        }
         this.brokerId = brokerId;
         tcpConnectorUri = "tcp://localhost:" + AvailablePortFinder.getNextAvailable();
 
