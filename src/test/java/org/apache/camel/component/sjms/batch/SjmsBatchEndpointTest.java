@@ -35,30 +35,44 @@ public class SjmsBatchEndpointTest extends CamelTestSupport {
         sjmsBatchComponent.setConnectionFactory(connectionFactory);
 
         CamelContext context = new DefaultCamelContext(registry);
-        context.addComponent("jmsBatch", sjmsBatchComponent);
-        context.addComponent("jms", sjmsComponent);
+        context.addComponent("sjmsbatch", sjmsBatchComponent);
+        context.addComponent("sjms", sjmsComponent);
 
         return context;
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
-        return new RouteBuilder() {
-            @Override
-            public void configure() throws Exception {
-                from("jmsBatch:in?aggregationStrategy=#aggStrategy").routeId("in")
-                    .to("mock:out");
-            }
-        };
+    public boolean isUseAdviceWith() {
+        return true;
     }
 
     @Test
-    public void testMessageFlow() throws InterruptedException {
+    public void testMessageFlow() throws Exception {
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("sjmsbatch:in?aggregationStrategy=#aggStrategy").routeId("in")
+                    .to("mock:out");
+            }
+        });
+        context.start();
+
         MockEndpoint mockOut = getMockEndpoint("mock:out");
         mockOut.setExpectedMessageCount(1);
 
-        template.sendBody("jms:in", "Ping");
+        template.sendBody("sjms:in", "Ping");
         assertMockEndpointsSatisfied();
     }
+
+    @Test(expected = org.apache.camel.FailedToCreateProducerException.class)
+    public void testProducerFailure() throws Exception {
+        context.addRoutes(new RouteBuilder() {
+            public void configure() throws Exception {
+                from("direct:in").to("sjmsbatch:testQueue");
+            }
+        });
+        context.start();
+    }
+
 
 }

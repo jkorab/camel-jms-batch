@@ -27,7 +27,7 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
     private String destinationName;
 
     @UriParam(label = "consumer", defaultValue = "1", description = "The number of JMS sessions to consume from")
-    private int jmsConsumers = 1;
+    private int consumerCount = 1;
 
     @UriParam(label = "consumer", defaultValue = "200",
             description = "The number of messages consumed at which the batch will be completed")
@@ -95,12 +95,12 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
         this.destinationName = destinationName;
     }
 
-    public int getJmsConsumers() {
-        return jmsConsumers;
+    public int getConsumerCount() {
+        return consumerCount;
     }
 
-    public void setJmsConsumers(int jmsConsumers) {
-        this.jmsConsumers = jmsConsumers;
+    public void setConsumerCount(int consumerCount) {
+        this.consumerCount = consumerCount;
     }
 
 }

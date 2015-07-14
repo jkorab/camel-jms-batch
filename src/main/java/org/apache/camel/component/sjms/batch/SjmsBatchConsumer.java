@@ -34,7 +34,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
     private final AggregationStrategy aggregationStrategy;
     private final int completionSize;
     private final int completionTimeout;
-    private final int jmsConsumers;
+    private final int consumerCount;
     private final ConnectionFactory connectionFactory;
     private final String destinationName;
     private final Processor processor;
@@ -50,21 +50,20 @@ public class SjmsBatchConsumer extends DefaultConsumer {
         this.sjmsBatchEndpoint = ObjectHelper.notNull(sjmsBatchEndpoint, "batchJmsEndpoint");
         this.processor = ObjectHelper.notNull(processor, "processor");
 
-        destinationName = ObjectHelper.notEmpty(sjmsBatchEndpoint.getDestinationName(), "jmsBatchEndpoint.destinationName");
+        destinationName = ObjectHelper.notEmpty(sjmsBatchEndpoint.getDestinationName(), "destinationName");
 
         completionSize = sjmsBatchEndpoint.getCompletionSize();
         completionTimeout = sjmsBatchEndpoint.getCompletionTimeout();
 
+        this.aggregationStrategy = ObjectHelper.notNull(sjmsBatchEndpoint.getAggregationStrategy(), "aggregationStrategy");
+
+        consumerCount = sjmsBatchEndpoint.getConsumerCount();
+        if (consumerCount <= 0) {
+            throw new IllegalArgumentException("consumerCount must be greater than 0");
+        }
+
         SjmsBatchComponent sjmsBatchComponent = (SjmsBatchComponent) sjmsBatchEndpoint.getComponent();
         connectionFactory = ObjectHelper.notNull(sjmsBatchComponent.getConnectionFactory(), "jmsBatchComponent.connectionFactory");
-
-        AggregationStrategy aggregationStrategy = sjmsBatchEndpoint.getAggregationStrategy();
-        this.aggregationStrategy = ObjectHelper.notNull(aggregationStrategy, "aggregationStrategy");
-
-        jmsConsumers = sjmsBatchEndpoint.getJmsConsumers();
-        if (jmsConsumers <= 0) {
-            throw new IllegalArgumentException("jmsConsumers must be greater than 0");
-        }
     }
 
     @Override
@@ -90,14 +89,14 @@ public class SjmsBatchConsumer extends DefaultConsumer {
             return;
         }
 
-        LOG.info("Starting {} consumer(s) for {}:{}", jmsConsumers, destinationName, completionSize);
-        consumersShutdownLatchRef.set(new CountDownLatch(jmsConsumers));
+        LOG.info("Starting {} consumer(s) for {}:{}", consumerCount, destinationName, completionSize);
+        consumersShutdownLatchRef.set(new CountDownLatch(consumerCount));
 
         // TODO may not like multiple consumers being spun up; test
         // executorService = getEndpoint().getCamelContext().getExecutorServiceManager()
         //        .newFixedThreadPool(this, "SjmsBatchConsumer", concurrentConsumers);
-        ExecutorService jmsConsumerExecutors = Executors.newFixedThreadPool(jmsConsumers);
-        for (int i = 0; i < jmsConsumers; i++) {
+        ExecutorService jmsConsumerExecutors = Executors.newFixedThreadPool(consumerCount);
+        for (int i = 0; i < consumerCount; i++) {
             jmsConsumerExecutors.execute(new BatchConsumptionLoop());
         }
     }
@@ -168,6 +167,8 @@ public class SjmsBatchConsumer extends DefaultConsumer {
         }
 
         private void consumeBatchesOnLoop(Session session, MessageConsumer consumer) throws JMSException {
+            final boolean usingTimeout = completionTimeout > 0;
+
             batchConsumption:
             while (running.get()) {
                 int messageCount = 0;
@@ -178,18 +179,11 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                 Exchange aggregatedExchange = null;
 
                 batch:
-                while (messageCount < completionSize) {
+                while ((completionSize <= 0) || (messageCount < completionSize)) {
                     // check periodically to see whether we should be shutting down
-                    long timeRemaining = completionTimeout - timeElapsed;
-                    if (timeElapsed > 0) {
-                        LOG.debug("Time remaining this batch: {}", timeRemaining);
-                    }
-
-                    if (timeRemaining <= 0) { // ensure that the thread doesn't wait indefinitely
-                        timeRemaining = 1;
-                    }
-                    final long waitTime = (timeRemaining > pollDuration) ? pollDuration : timeRemaining;
-                    LOG.debug("waiting for {}", waitTime);
+                    long waitTime = (usingTimeout)
+                            ? getWaitTime(timeElapsed)
+                            : pollDuration;
                     Message message = consumer.receive(waitTime);
 
                     if (running.get()) { // no interruptions received
@@ -197,7 +191,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                             // timed out, no message received
                             LOG.trace("No message received");
                         } else {
-                            if (messageCount == 0) { // this is the first message
+                            if ((usingTimeout) && (messageCount == 0)) { // this is the first message
                                 startTime = new Date().getTime(); // start counting down the period for this batch
                             }
                             messageCount++;
@@ -211,7 +205,8 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                                         + message.getClass().toString());
                             }
                         }
-                        if (startTime > 0) {
+
+                        if ((usingTimeout) && (startTime > 0)) {
                             // a batch has been started, check whether it should be timed out
                             long currentTime = new Date().getTime();
                             timeElapsed = currentTime - startTime;
@@ -221,6 +216,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                                 break batch;
                             }
                         }
+
                     } else {
                         LOG.info("Shutdown signal received - rolling batch back");
                         session.rollback();
@@ -232,7 +228,28 @@ public class SjmsBatchConsumer extends DefaultConsumer {
             }
         }
 
-        public void process(Exchange exchange, Session session) {
+        private long getWaitTime(long timeElapsed) {
+            long timeRemaining = getTimeRemaining(timeElapsed);
+
+            // wait for the shorter of the time remaining or the poll duration
+            if (timeRemaining <= 0) { // ensure that the thread doesn't wait indefinitely
+                timeRemaining = 1;
+            }
+            final long waitTime = (timeRemaining > pollDuration) ? pollDuration : timeRemaining;
+
+            LOG.debug("waiting for {}", waitTime);
+            return waitTime;
+        }
+
+        private long getTimeRemaining(long timeElapsed) {
+            long timeRemaining = completionTimeout - timeElapsed;
+            if (timeElapsed > 0) {
+                LOG.debug("Time remaining this batch: {}", timeRemaining);
+            }
+            return timeRemaining;
+        }
+
+        private void process(Exchange exchange, Session session) {
             assert (exchange != null);
             int id = batchCount.getAndIncrement();
             int batchSize = exchange.getProperty(SjmsBatchEndpoint.PROPERTY_BATCH_SIZE, Integer.class);

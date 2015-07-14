@@ -2,6 +2,7 @@ package org.apache.camel.component.sjms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
+import org.apache.camel.Exchange;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import javax.jms.ConnectionFactory;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
 
 /**
@@ -34,7 +36,6 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         SimpleRegistry registry = new SimpleRegistry();
         registry.put("testStrategy", new ListAggregationStrategy());
         ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
-        //ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("failover:(tcp://localhost:61616)");
 
         SjmsComponent sjmsComponent = new SjmsComponent();
         sjmsComponent.setConnectionFactory(connectionFactory);
@@ -70,38 +71,29 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         return true;
     }
 
-    @Test(expected = org.apache.camel.FailedToCreateProducerException.class)
-    public void testProducerFailure() throws Exception {
-        context.addRoutes(new RouteBuilder() {
-            public void configure() throws Exception {
-                from("direct:in").to("sjmsbatch:testQueue");
-            }
-        });
-        context.start();
-    }
-
     @Test
     public void testConsumption() throws Exception {
 
-        final int messageCount = 20000;
-        final int jmsConsumerCount = 5;
+        final int messageCount = 10000;
+        final int consumerCount = 5;
 
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("sjmsbatch:" + queueName +
-                        "?completionTimeout=1000" +
-                        "&completionSize=200" +
-                        "&jmsConsumers=" + jmsConsumerCount +
-                        "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10).autoStartup(false)
-                        .split(body())
-                        .to("mock:split")
-                        .end();
+
+                int completionTimeout = 1000;
+                int completionSize = 200;
+
+                fromF("sjmsbatch:%s?completionTimeout=%s&completionSize=%s" +
+                        "&consumerCount=%s&aggregationStrategy=#testStrategy",
+                        queueName, completionTimeout, completionSize, consumerCount)
+                        .routeId("batchConsumer").startupOrder(10).autoStartup(false)
+                    .split(body())
+                    .to("mock:split");
             }
         });
         context.start();
-
 
         MockEndpoint mockBefore = getMockEndpoint("mock:before");
         mockBefore.setExpectedMessageCount(messageCount);
@@ -122,23 +114,17 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         LOG.info("Average throughput {} msg/s", (long) (messageCount / (time / 1000d)));
     }
 
-    private String[] generateStrings(int messageCount) {
-        String[] strings = new String[messageCount];
-        for (int i = 0; i < messageCount; i++) {
-            strings[i] = "message:" + i;
-        }
-        return strings;
-    }
-
     @Test
     public void testConsumption_completionSize() throws Exception {
-        final int batchSize = 5;
+        final int completionSize = 5;
+        final int completionTimeout = -1; // size-based only
+
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("sjmsbatch:" + queueName +
-                        "?completionSize=" + batchSize + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
+                fromF("sjmsbatch:%s?completionTimeout=%s&completionSize=%s&aggregationStrategy=#testStrategy",
+                        queueName, completionTimeout, completionSize).routeId("batchConsumer").startupOrder(10)
                         .log(LoggingLevel.DEBUG, "${body.size}")
                         .to("mock:batches");
             }
@@ -147,7 +133,7 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
 
         int messageCount = 100;
         MockEndpoint mockBatches = getMockEndpoint("mock:batches");
-        mockBatches.expectedMessageCount(messageCount / batchSize);
+        mockBatches.expectedMessageCount(messageCount / completionSize);
 
         template.sendBody("direct:in", generateStrings(messageCount));
         mockBatches.assertIsSatisfied();
@@ -156,29 +142,41 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
     @Test
     public void testConsumption_completionTimeout() throws Exception {
         final int completionTimeout = 2000;
+        final int completionSize = -1; // timeout-based only
+
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("sjmsbatch:" + queueName +
-                        "?completionTimeout=" + completionTimeout + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
+                fromF("sjmsbatch:%s?completionTimeout=%s&completionSize=%s&aggregationStrategy=#testStrategy",
+                        queueName, completionTimeout, completionSize).routeId("batchConsumer").startupOrder(10)
                         .to("mock:batches");
             }
         });
         context.start();
 
-        int messageCount = 50; // too small to match default completion size
+        int messageCount = 50;
         assertTrue(messageCount < SjmsBatchEndpoint.DEFAULT_COMPLETION_SIZE);
         MockEndpoint mockBatches = getMockEndpoint("mock:batches");
         mockBatches.expectedMessageCount(1);  // everything batched together
 
         template.sendBody("direct:in", generateStrings(messageCount));
         mockBatches.assertIsSatisfied();
+        Exchange exchange = mockBatches.getExchanges().get(0);
+        assertEquals(messageCount, exchange.getIn().getBody(List.class).size());
     }
 
     private String getQueueName() {
         SimpleDateFormat sdf = new SimpleDateFormat("yyMMddhhmmss");
         return "sjmsbatch-" + sdf.format(new Date());
+    }
+
+    private String[] generateStrings(int messageCount) {
+        String[] strings = new String[messageCount];
+        for (int i = 0; i < messageCount; i++) {
+            strings[i] = "message:" + i;
+        }
+        return strings;
     }
 
 }

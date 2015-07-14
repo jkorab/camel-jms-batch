@@ -18,7 +18,7 @@ Then use it within an consumer endpoint as follows:
 
 The following attributes are optional:
 
-* `concurrentConsumers` - the number of threads that out to process the aggregated messages
+* `consumerCount` - the number of concurrent JMS consumers (default 1) 
 * `completionSize` - the size of the batch (default 100)
 * `completionTimeout` - time since receipt of the first message in the batch in ms (default 1000)
 
