@@ -8,6 +8,7 @@ import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.sjms.SjmsComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
+import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.camel.util.StopWatch;
 import org.junit.Rule;
 import org.junit.Test;
@@ -22,10 +23,10 @@ import java.util.Date;
 /**
  * @author jkorab
  */
-public class SjmsBatchConsumerTest extends BrokerTestSupport {
+public class SjmsBatchConsumerTest extends CamelTestSupport {
     private final Logger LOG = LoggerFactory.getLogger(SjmsBatchConsumerTest.class);
 
-    //@Rule
+    @Rule
     public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
 
     @Override
