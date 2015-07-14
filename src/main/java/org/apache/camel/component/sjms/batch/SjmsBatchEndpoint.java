@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
@@ -14,8 +14,8 @@ import org.apache.camel.spi.UriPath;
 /**
  * @author jkorab
  */
-@UriEndpoint(scheme = "sjmsBatch", title = "Simple JMS Batch Component", syntax = "sjms-batch:destinationName?aggregationStrategy=#aggStrategy", consumerClass = JmsBatchComponent.class, label = "messaging")
-public class JmsBatchEndpoint extends DefaultEndpoint {
+@UriEndpoint(scheme = "sjmsBatch", title = "Simple JMS Batch Component", syntax = "sjms-batch:destinationName?aggregationStrategy=#aggStrategy", consumerClass = SjmsBatchComponent.class, label = "messaging")
+public class SjmsBatchEndpoint extends DefaultEndpoint {
 
 
     public static final int DEFAULT_COMPLETION_SIZE = 200; // the default dispatch queue size in ActiveMQ
@@ -44,9 +44,9 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
     @UriParam(label = "consumer", description = "A #-reference to an AggregationStrategy visible to Camel")
     private AggregationStrategy aggregationStrategy;
 
-    public JmsBatchEndpoint() {}
+    public SjmsBatchEndpoint() {}
 
-    public JmsBatchEndpoint(String endpointUri, Component component, String remaining) {
+    public SjmsBatchEndpoint(String endpointUri, Component component, String remaining) {
         super(endpointUri, component);
         this.destinationName = remaining;
     }
@@ -58,12 +58,12 @@ public class JmsBatchEndpoint extends DefaultEndpoint {
 
     @Override
     public Producer createProducer() throws Exception {
-        throw new UnsupportedOperationException("Cannot produce though a " + JmsBatchEndpoint.class.getName());
+        throw new UnsupportedOperationException("Cannot produce though a " + SjmsBatchEndpoint.class.getName());
     }
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        return new JmsBatchConsumer(this, processor);
+        return new SjmsBatchConsumer(this, processor);
     }
 
     public AggregationStrategy getAggregationStrategy() {

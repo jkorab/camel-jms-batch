@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
@@ -10,20 +10,20 @@ import java.util.Map;
 /**
  * @author jkorab
  */
-public class JmsBatchComponent extends UriEndpointComponent {
+public class SjmsBatchComponent extends UriEndpointComponent {
 
     private ConnectionFactory connectionFactory;
 
-    public JmsBatchComponent() {
-        super(JmsBatchEndpoint.class);
+    public SjmsBatchComponent() {
+        super(SjmsBatchEndpoint.class);
     }
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
         ObjectHelper.notNull(connectionFactory, "connectionFactory is null");
-        JmsBatchEndpoint jmsBatchEndpoint = new JmsBatchEndpoint(uri, this, remaining);
-        setProperties(jmsBatchEndpoint, parameters);
-        return jmsBatchEndpoint;
+        SjmsBatchEndpoint sjmsBatchEndpoint = new SjmsBatchEndpoint(uri, this, remaining);
+        setProperties(sjmsBatchEndpoint, parameters);
+        return sjmsBatchEndpoint;
     }
 
     public ConnectionFactory getConnectionFactory() {

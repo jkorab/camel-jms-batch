@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
@@ -22,28 +22,46 @@ import java.util.Date;
 /**
  * @author jkorab
  */
-public class JmsBatchConsumerTest extends BrokerTestSupport {
-    private final Logger LOG = LoggerFactory.getLogger(JmsBatchConsumerTest.class);
+public class SjmsBatchConsumerTest extends BrokerTestSupport {
+    private final Logger LOG = LoggerFactory.getLogger(SjmsBatchConsumerTest.class);
 
-    @Rule
+    //@Rule
     public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
 
     @Override
     public CamelContext createCamelContext() throws Exception {
         SimpleRegistry registry = new SimpleRegistry();
         registry.put("testStrategy", new ListAggregationStrategy());
-        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
+        //ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
+        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("failover:(tcp://localhost:61616)");
 
         SjmsComponent sjmsComponent = new SjmsComponent();
         sjmsComponent.setConnectionFactory(connectionFactory);
 
-        JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
-        jmsBatchComponent.setConnectionFactory(connectionFactory);
+        SjmsBatchComponent sjmsBatchComponent = new SjmsBatchComponent();
+        sjmsBatchComponent.setConnectionFactory(connectionFactory);
 
         CamelContext context = new DefaultCamelContext(registry);
-        context.addComponent("jms", sjmsComponent);
-        context.addComponent("batchjms", jmsBatchComponent);
+        context.addComponent("sjms", sjmsComponent);
+        context.addComponent("sjmsbatch", sjmsBatchComponent);
         return context;
+    }
+
+    private static class TransactedSendHarness extends RouteBuilder {
+        private final String queueName;
+
+        public TransactedSendHarness(String queueName) {
+            this.queueName = queueName;
+        }
+
+        @Override
+        public void configure() throws Exception {
+            from("direct:in").routeId("harness").startupOrder(20)
+                .split(body())
+                    .toF("sjms:queue:%s?transacted=true", queueName)
+                    .to("mock:before")
+                .end();
+        }
     }
 
     @Override
@@ -55,7 +73,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
     public void testProducerFailure() throws Exception {
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("direct:in").to("batchjms:testQueue");
+                from("direct:in").to("sjmsbatch:testQueue");
             }
         });
         context.start();
@@ -64,24 +82,22 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
     @Test
     public void testConsumption() throws Exception {
 
-        final int messageCount = 20000;
+        final int messageCount = 2000;
         final int jmsConsumerCount = 1;
-        final int concurrentConsumers = 5;
+        final int concurrentConsumers = 1; // TODO this is the equivalent of threads() - remove
 
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("batchjms:" + queueName +
-                        "?completionTimeout=200" +
-                        "&completionSize=1000" +
+                from("sjmsbatch:" + queueName +
+                        "?completionTimeout=1000" +
+                        "&completionSize=200" +
                         "&jmsConsumers=" + jmsConsumerCount +
                         "&concurrentConsumers=" + concurrentConsumers +
                         "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10).autoStartup(false)
-                        .wireTap("mock:batches")
                         .split(body())
                         .to("mock:split")
-                        .stop()
                         .end();
             }
         });
@@ -122,7 +138,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("batchjms:" + queueName +
+                from("sjmsbatch:" + queueName +
                         "?completionSize=" + batchSize + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
                         .log(LoggingLevel.DEBUG, "${body.size}")
                         .to("mock:batches");
@@ -145,7 +161,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         context.addRoutes(new TransactedSendHarness(queueName));
         context.addRoutes(new RouteBuilder() {
             public void configure() throws Exception {
-                from("batchjms:" + queueName +
+                from("sjmsbatch:" + queueName +
                         "?completionTimeout=" + completionTimeout + "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10)
                         .to("mock:batches");
             }
@@ -153,7 +169,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
         context.start();
 
         int messageCount = 50; // too small to match default completion size
-        assertTrue(messageCount < JmsBatchEndpoint.DEFAULT_COMPLETION_SIZE);
+        assertTrue(messageCount < SjmsBatchEndpoint.DEFAULT_COMPLETION_SIZE);
         MockEndpoint mockBatches = getMockEndpoint("mock:batches");
         mockBatches.expectedMessageCount(1);  // everything batched together
 
@@ -163,23 +179,7 @@ public class JmsBatchConsumerTest extends BrokerTestSupport {
 
     private String getQueueName() {
         SimpleDateFormat sdf = new SimpleDateFormat("yyMMddhhmmss");
-        return "batchJms-" + sdf.format(new Date());
+        return "sjmsbatch-" + sdf.format(new Date());
     }
 
-    private static class TransactedSendHarness extends RouteBuilder {
-        private final String queueName;
-
-        public TransactedSendHarness(String queueName) {
-            this.queueName = queueName;
-        }
-
-        @Override
-        public void configure() throws Exception {
-            from("direct:in").routeId("harness").startupOrder(20)
-                .split(body())
-                    .to("mock:before")
-                    .toF("jms:queue:%s?transacted=true", queueName)
-                .end();
-        }
-    }
 }

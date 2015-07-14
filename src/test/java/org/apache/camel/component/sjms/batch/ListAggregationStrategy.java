@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.processor.aggregate.AggregationStrategy;

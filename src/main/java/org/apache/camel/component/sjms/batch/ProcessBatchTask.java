@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -31,7 +31,7 @@ class ProcessBatchTask implements Runnable {
     @Override
     public void run() {
         int id = batchCount.getAndIncrement();
-        int batchSize = aggregatedExchange.getProperty(JmsBatchEndpoint.PROPERTY_BATCH_SIZE, Integer.class);
+        int batchSize = aggregatedExchange.getProperty(SjmsBatchEndpoint.PROPERTY_BATCH_SIZE, Integer.class);
         LOG.debug("Processing batch[{}]:size={}:total={}", id, batchSize, messagesReceived.addAndGet(batchSize));
 
         aggregatedExchange.addOnCompletion(new Synchronization() {

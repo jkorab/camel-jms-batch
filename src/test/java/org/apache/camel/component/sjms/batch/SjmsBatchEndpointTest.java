@@ -1,4 +1,4 @@
-package org.apache.camel.component.jms.batch;
+package org.apache.camel.component.sjms.batch;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
@@ -15,7 +15,7 @@ import org.junit.Test;
 /**
  * @author jkorab
  */
-public class JmsBatchEndpointTest extends CamelTestSupport {
+public class SjmsBatchEndpointTest extends CamelTestSupport {
 
     @Rule
     public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
@@ -31,11 +31,11 @@ public class JmsBatchEndpointTest extends CamelTestSupport {
         SjmsComponent sjmsComponent = new SjmsComponent();
         sjmsComponent.setConnectionFactory(connectionFactory);
 
-        JmsBatchComponent jmsBatchComponent = new JmsBatchComponent();
-        jmsBatchComponent.setConnectionFactory(connectionFactory);
+        SjmsBatchComponent sjmsBatchComponent = new SjmsBatchComponent();
+        sjmsBatchComponent.setConnectionFactory(connectionFactory);
 
         CamelContext context = new DefaultCamelContext(registry);
-        context.addComponent("jmsBatch", jmsBatchComponent);
+        context.addComponent("jmsBatch", sjmsBatchComponent);
         context.addComponent("jms", sjmsComponent);
 
         return context;
