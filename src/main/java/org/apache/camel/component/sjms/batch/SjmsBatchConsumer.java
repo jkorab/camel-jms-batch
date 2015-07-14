@@ -5,6 +5,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.impl.DefaultConsumer;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
+import org.apache.camel.spi.Synchronization;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -36,8 +39,10 @@ public class SjmsBatchConsumer extends DefaultConsumer {
     private final String destinationName;
     private final Processor processor;
     private final int pollDuration = 100;
-    private ExecutorService executorService;
-    private final int concurrentConsumers;
+
+    private static AtomicInteger batchCount = new AtomicInteger();
+    private static AtomicLong messagesReceived = new AtomicLong();
+    private static AtomicLong messagesProcessed = new AtomicLong();
 
     public SjmsBatchConsumer(SjmsBatchEndpoint sjmsBatchEndpoint, Processor processor) {
         super(sjmsBatchEndpoint, processor);
@@ -55,11 +60,6 @@ public class SjmsBatchConsumer extends DefaultConsumer {
 
         AggregationStrategy aggregationStrategy = sjmsBatchEndpoint.getAggregationStrategy();
         this.aggregationStrategy = ObjectHelper.notNull(aggregationStrategy, "aggregationStrategy");
-
-        concurrentConsumers = sjmsBatchEndpoint.getConcurrentConsumers();
-        if (concurrentConsumers <= 0) {
-            throw new IllegalArgumentException("concurrentConsumers must be greater than 0");
-        }
 
         jmsConsumers = sjmsBatchEndpoint.getJmsConsumers();
         if (jmsConsumers <= 0) {
@@ -81,11 +81,6 @@ public class SjmsBatchConsumer extends DefaultConsumer {
     protected void doStart() throws Exception {
         super.doStart();
 
-        // TODO may not like multiple consumers being spun up; test
-         executorService = getEndpoint().getCamelContext().getExecutorServiceManager()
-                .newFixedThreadPool(this, "SjmsBatchConsumer", concurrentConsumers);
-
-
         // start up a shared connection
         try {
             connection = connectionFactory.createConnection();
@@ -97,6 +92,10 @@ public class SjmsBatchConsumer extends DefaultConsumer {
 
         LOG.info("Starting {} consumer(s) for {}:{}", jmsConsumers, destinationName, completionSize);
         consumersShutdownLatchRef.set(new CountDownLatch(jmsConsumers));
+
+        // TODO may not like multiple consumers being spun up; test
+        // executorService = getEndpoint().getCamelContext().getExecutorServiceManager()
+        //        .newFixedThreadPool(this, "SjmsBatchConsumer", concurrentConsumers);
         ExecutorService jmsConsumerExecutors = Executors.newFixedThreadPool(jmsConsumers);
         for (int i = 0; i < jmsConsumers; i++) {
             jmsConsumerExecutors.execute(new BatchConsumptionLoop());
@@ -121,10 +120,6 @@ public class SjmsBatchConsumer extends DefaultConsumer {
             connection.close();
         } catch (JMSException jex) {
             LOG.error("Exception caught closing connection: {}", getStackTrace(jex));
-        }
-
-        if (executorService != null) {
-            getEndpoint().getCamelContext().getExecutorServiceManager().shutdownGraceful(executorService);
         }
 
     }
@@ -173,7 +168,8 @@ public class SjmsBatchConsumer extends DefaultConsumer {
         }
 
         private void consumeBatchesOnLoop(Session session, MessageConsumer consumer) throws JMSException {
-            batchConsumption: while(running.get()) {
+            batchConsumption:
+            while (running.get()) {
                 int messageCount = 0;
 
                 // reset the clock counters
@@ -181,7 +177,8 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                 long startTime = 0;
                 Exchange aggregatedExchange = null;
 
-                batch: while (messageCount < completionSize) {
+                batch:
+                while (messageCount < completionSize) {
                     // check periodically to see whether we should be shutting down
                     long timeRemaining = completionTimeout - timeElapsed;
                     if (timeElapsed > 0) {
@@ -231,7 +228,24 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                     }
                 } // batch
                 assert (aggregatedExchange != null);
-                executorService.submit(new ProcessBatchTask(processor, aggregatedExchange, session));
+                process(aggregatedExchange, session);
+            }
+        }
+
+        public void process(Exchange exchange, Session session) {
+            assert (exchange != null);
+            int id = batchCount.getAndIncrement();
+            int batchSize = exchange.getProperty(SjmsBatchEndpoint.PROPERTY_BATCH_SIZE, Integer.class);
+            LOG.debug("Processing batch[{}]:size={}:total={}", id, batchSize, messagesReceived.addAndGet(batchSize));
+
+            Synchronization committing = new SessionCompletion(session);
+            exchange.addOnCompletion(committing);
+            try {
+                processor.process(exchange);
+                LOG.debug("Completed processing[{}]:total={}", id, messagesProcessed.addAndGet(batchSize));
+            } catch (Exception e) {
+                LOG.error("Error processing exchange: {}", e.getMessage());
+                exchange.setException(e);
             }
         }
 

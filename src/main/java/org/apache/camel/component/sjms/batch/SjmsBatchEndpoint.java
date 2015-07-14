@@ -26,9 +26,6 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
     @Metadata(required = "true")
     private String destinationName;
 
-    @UriParam(label = "consumer", defaultValue = "1", description = "The number of concurrent consumers per JMS Session")
-    private int concurrentConsumers = 1;
-
     @UriParam(label = "consumer", defaultValue = "1", description = "The number of JMS sessions to consume from")
     private int jmsConsumers = 1;
 
@@ -88,14 +85,6 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
 
     public void setCompletionTimeout(Integer completionTimeout) {
         this.completionTimeout = completionTimeout;
-    }
-
-    public int getConcurrentConsumers() {
-        return concurrentConsumers;
-    }
-
-    public void setConcurrentConsumers(int concurrentConsumers) {
-        this.concurrentConsumers = concurrentConsumers;
     }
 
     public String getDestinationName() {

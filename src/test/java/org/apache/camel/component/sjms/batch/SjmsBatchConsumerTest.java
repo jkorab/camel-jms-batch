@@ -33,8 +33,8 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
     public CamelContext createCamelContext() throws Exception {
         SimpleRegistry registry = new SimpleRegistry();
         registry.put("testStrategy", new ListAggregationStrategy());
-        //ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
-        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("failover:(tcp://localhost:61616)");
+        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(broker.getTcpConnectorUri());
+        //ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("failover:(tcp://localhost:61616)");
 
         SjmsComponent sjmsComponent = new SjmsComponent();
         sjmsComponent.setConnectionFactory(connectionFactory);
@@ -83,9 +83,8 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
     @Test
     public void testConsumption() throws Exception {
 
-        final int messageCount = 2000;
-        final int jmsConsumerCount = 1;
-        final int concurrentConsumers = 1; // TODO this is the equivalent of threads() - remove
+        final int messageCount = 20000;
+        final int jmsConsumerCount = 5;
 
         final String queueName = getQueueName();
         context.addRoutes(new TransactedSendHarness(queueName));
@@ -95,7 +94,6 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
                         "?completionTimeout=1000" +
                         "&completionSize=200" +
                         "&jmsConsumers=" + jmsConsumerCount +
-                        "&concurrentConsumers=" + concurrentConsumers +
                         "&aggregationStrategy=#testStrategy").routeId("batchConsumer").startupOrder(10).autoStartup(false)
                         .split(body())
                         .to("mock:split")
@@ -112,7 +110,7 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         mockSplit.setExpectedMessageCount(messageCount);
 
         LOG.info("Sending messages");
-        template.sendBody("direct:in", generatePojos(messageCount));
+        template.sendBody("direct:in", generateStrings(messageCount));
         LOG.info("Send complete");
 
         StopWatch stopWatch = new StopWatch();
@@ -124,12 +122,12 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         LOG.info("Average throughput {} msg/s", (long) (messageCount / (time / 1000d)));
     }
 
-    private Pojo[] generatePojos(int messageCount) {
-        Pojo[] pojos = new Pojo[messageCount];
+    private String[] generateStrings(int messageCount) {
+        String[] strings = new String[messageCount];
         for (int i = 0; i < messageCount; i++) {
-            pojos[i] = new Pojo("pojo:" + i);
+            strings[i] = "message:" + i;
         }
-        return pojos;
+        return strings;
     }
 
     @Test
@@ -151,7 +149,7 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         MockEndpoint mockBatches = getMockEndpoint("mock:batches");
         mockBatches.expectedMessageCount(messageCount / batchSize);
 
-        template.sendBody("direct:in", generatePojos(messageCount));
+        template.sendBody("direct:in", generateStrings(messageCount));
         mockBatches.assertIsSatisfied();
     }
 
@@ -174,7 +172,7 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
         MockEndpoint mockBatches = getMockEndpoint("mock:batches");
         mockBatches.expectedMessageCount(1);  // everything batched together
 
-        template.sendBody("direct:in", generatePojos(messageCount));
+        template.sendBody("direct:in", generateStrings(messageCount));
         mockBatches.assertIsSatisfied();
     }
 
