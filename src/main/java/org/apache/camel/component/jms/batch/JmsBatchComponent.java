@@ -2,6 +2,7 @@ package org.apache.camel.component.jms.batch;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
+import org.apache.camel.util.ObjectHelper;
 import org.apache.commons.lang.Validate;
 
 import javax.jms.ConnectionFactory;
@@ -20,7 +21,7 @@ public class JmsBatchComponent extends UriEndpointComponent {
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        Validate.notNull(connectionFactory);
+        ObjectHelper.notNull(connectionFactory, "connectionFactory is null");
         JmsBatchEndpoint jmsBatchEndpoint = new JmsBatchEndpoint(uri, this, remaining);
         setProperties(jmsBatchEndpoint, parameters);
         return jmsBatchEndpoint;

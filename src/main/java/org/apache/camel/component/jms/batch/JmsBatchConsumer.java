@@ -5,13 +5,14 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.impl.DefaultConsumer;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
-import org.apache.commons.lang.Validate;
-import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.jms.*;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.io.StringWriter;
 import java.util.Date;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -35,17 +36,15 @@ public class JmsBatchConsumer extends DefaultConsumer {
     private final String destinationName;
     private final Processor processor;
     private ExecutorService executorService;
+    private final int concurrentConsumers;
 
     public JmsBatchConsumer(JmsBatchEndpoint jmsBatchEndpoint, Processor processor) {
         super(jmsBatchEndpoint, processor);
 
-        Validate.notNull(jmsBatchEndpoint, "batchJmsEndpoint is null");
-        this.jmsBatchEndpoint = jmsBatchEndpoint;
-        Validate.notNull(processor, "processor is null");
-        this.processor = processor;
+        this.jmsBatchEndpoint = ObjectHelper.notNull(jmsBatchEndpoint, "batchJmsEndpoint");
+        this.processor = ObjectHelper.notNull(processor, "processor");
 
-        destinationName = jmsBatchEndpoint.getDestinationName();
-        Validate.notEmpty(destinationName, "destinationName is empty");
+        destinationName = ObjectHelper.notEmpty(jmsBatchEndpoint.getDestinationName(), "jmsBatchEndpoint.destinationName");
 
         completionSize = jmsBatchEndpoint.getCompletionSize();
         completionTimeout = jmsBatchEndpoint.getCompletionTimeout();
@@ -54,15 +53,17 @@ public class JmsBatchConsumer extends DefaultConsumer {
         connectionFactory = jmsBatchComponent.getConnectionFactory();
 
         AggregationStrategy aggregationStrategy = jmsBatchEndpoint.getAggregationStrategy();
-        Validate.notNull(aggregationStrategy, "aggregationStrategy is null");
-        this.aggregationStrategy = aggregationStrategy;
+        this.aggregationStrategy = ObjectHelper.notNull(aggregationStrategy, "aggregationStrategy");
 
-        int concurrentConsumers = jmsBatchEndpoint.getConcurrentConsumers();
-        Validate.isTrue(concurrentConsumers > 0, "concurrentConsumers must be greater than 0");
-        executorService = Executors.newFixedThreadPool(concurrentConsumers);
+        concurrentConsumers = jmsBatchEndpoint.getConcurrentConsumers();
+        if (concurrentConsumers > 0) {
+            throw new IllegalArgumentException("concurrentConsumers must be greater than 0");
+        }
 
         jmsConsumers = jmsBatchEndpoint.getJmsConsumers();
-        Validate.isTrue(jmsConsumers > 0, "jmsConsumers must be greater than 0");
+        if (jmsConsumers > 0) {
+            throw new IllegalArgumentException("jmsConsumers must be greater than 0");
+        }
     }
 
     @Override
@@ -78,12 +79,17 @@ public class JmsBatchConsumer extends DefaultConsumer {
     @Override
     protected void doStart() throws Exception {
         super.doStart();
+
+        // TODO may not like multiple consumers being spun up; test
+        executorService = getEndpoint().getCamelContext().getExecutorServiceManager()
+                .newFixedThreadPool(this, "SjmsBatchConsumer", concurrentConsumers);
+
         // start up a shared connection
         try {
             connection = connectionFactory.createConnection();
             connection.start();
         } catch (JMSException ex) {
-            LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(ex));
+            LOG.error("Exception caught closing connection: {}", getStackTrace(ex));
             return;
         }
 
@@ -112,8 +118,19 @@ public class JmsBatchConsumer extends DefaultConsumer {
             LOG.debug("Shutting down connection");
             connection.close();
         } catch (JMSException jex) {
-            LOG.error("Exception caught closing connection: {}", ExceptionUtils.getStackTrace(jex));
+            LOG.error("Exception caught closing connection: {}", getStackTrace(jex));
         }
+
+        if (executorService != null) {
+            getEndpoint().getCamelContext().getExecutorServiceManager().shutdownGraceful(executorService);
+        }
+
+    }
+
+    private String getStackTrace(Exception ex) {
+        StringWriter writer = new StringWriter();
+        ex.printStackTrace(new PrintWriter(writer));
+        return writer.toString();
     }
 
     private class BatchConsumptionLoop implements Runnable {
@@ -187,7 +204,7 @@ public class JmsBatchConsumer extends DefaultConsumer {
                     executorService.submit(new ProcessBatchTask(processor, aggregatedExchange, session));
                 }
             } catch (Exception ex) {
-                LOG.error("Exception caught consuming from {}: {}", destinationName, ExceptionUtils.getStackTrace(ex));
+                LOG.error("Exception caught consuming from {}: {}", destinationName, getStackTrace(ex));
             } finally {
                 // indicate that we have shut down
                 CountDownLatch consumersShutdownLatch = consumersShutdownLatchRef.get();
@@ -195,6 +212,7 @@ public class JmsBatchConsumer extends DefaultConsumer {
             }
         }
 
+        // TODO replace with final DefaultExchange exchange = (DefaultExchange) JmsMessageHelper.createExchange(message, getEndpoint());
         private Exchange getExchange(Message message) throws JMSException {
             Exchange exchange = jmsBatchEndpoint.createExchange();
             org.apache.camel.Message in = exchange.getIn();
@@ -213,8 +231,7 @@ public class JmsBatchConsumer extends DefaultConsumer {
 
         private void populateExchangeHeaders(Exchange exchange, Message message) throws JMSException {
             // TODO copy any interesting headers from the JMS Message to the Exchange here
-            // I haven't added anything here on purpose, as I don't know at this stage which
-            // headers, if any, are relevant - JK
+            // TODO header strategy
         }
     }
 }
