@@ -3,13 +3,13 @@ package org.apache.camel.component.sjms.batch;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.sjms.SjmsComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.SimpleRegistry;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.camel.util.toolbox.AggregationStrategies;
-import org.junit.Rule;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -17,8 +17,25 @@ import org.junit.Test;
  */
 public class SjmsBatchEndpointTest extends CamelTestSupport {
 
-    @Rule
-    public EmbeddedActiveMQBroker broker = new EmbeddedActiveMQBroker("localhost");
+    // Create one embedded broker instance for the entire test, as we aren't actually
+    // going to send any messages to it; we just need it so that the ConnectionFactory
+    // has something local to connect to.
+    public static EmbeddedActiveMQBroker broker;
+
+    @BeforeClass
+    public static void setupBroker() {
+        broker = new EmbeddedActiveMQBroker("localhost");
+        try {
+            broker.before();
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
+    }
+
+    @AfterClass
+    public static void shutDownBroker() {
+        broker.after();
+    }
 
     @Override
     protected CamelContext createCamelContext() throws Exception {
@@ -46,24 +63,6 @@ public class SjmsBatchEndpointTest extends CamelTestSupport {
         return true;
     }
 
-    @Test
-    public void testMessageFlow() throws Exception {
-        context.addRoutes(new RouteBuilder() {
-            @Override
-            public void configure() throws Exception {
-                from("sjmsbatch:in?aggregationStrategy=#aggStrategy").routeId("in")
-                    .to("mock:out");
-            }
-        });
-        context.start();
-
-        MockEndpoint mockOut = getMockEndpoint("mock:out");
-        mockOut.setExpectedMessageCount(1);
-
-        template.sendBody("sjms:in", "Ping");
-        assertMockEndpointsSatisfied();
-    }
-
     @Test(expected = org.apache.camel.FailedToCreateProducerException.class)
     public void testProducerFailure() throws Exception {
         context.addRoutes(new RouteBuilder() {
@@ -74,5 +73,28 @@ public class SjmsBatchEndpointTest extends CamelTestSupport {
         context.start();
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void testConsumer_negativePollDuration() throws Exception {
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("sjmsbatch:in?aggregationStrategy=#aggStrategy&pollDuration=-1")
+                    .to("mock:out");
+            }
+        });
+        context.start();
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testConsumer_negativeConsumerCount() throws Exception {
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("sjmsbatch:in?aggregationStrategy=#aggStrategy&consumerCount=-1")
+                        .to("mock:out");
+            }
+        });
+        context.start();
+    }
 
 }

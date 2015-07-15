@@ -162,8 +162,58 @@ public class SjmsBatchConsumerTest extends CamelTestSupport {
 
         template.sendBody("direct:in", generateStrings(messageCount));
         mockBatches.assertIsSatisfied();
-        Exchange exchange = mockBatches.getExchanges().get(0);
-        assertEquals(messageCount, exchange.getIn().getBody(List.class).size());
+        assertFirstMessageBodyOfLength(mockBatches, messageCount);
+    }
+
+    /**
+     * Checks whether multiple consumer endpoints can operate in parallel.
+     */
+    @Test
+    public void testConsumption_multipleConsumerEndpoints() throws Exception {
+        final int completionTimeout = 2000;
+        final int completionSize = 5;
+
+        final String queueName = getQueueName();
+        context.addRoutes(new RouteBuilder() {
+            public void configure() throws Exception {
+
+                from("direct:in")
+                    .split().body()
+                    .multicast()
+                        .toF("sjms:%s", queueName + "A")
+                        .toF("sjms:%s", queueName + "B")
+                    .end();
+
+                fromF("sjmsbatch:%s?completionTimeout=%s&completionSize=%s&aggregationStrategy=#testStrategy",
+                        queueName + "A", completionTimeout, completionSize).routeId("batchConsumerA")
+                        .to("mock:outA");
+
+                fromF("sjmsbatch:%s?completionTimeout=%s&completionSize=%s&aggregationStrategy=#testStrategy",
+                        queueName + "B", completionTimeout, completionSize).routeId("batchConsumerB")
+                        .to("mock:outB");
+
+            }
+        });
+        context.start();
+
+        int messageCount = 5;
+
+        assertTrue(messageCount < SjmsBatchEndpoint.DEFAULT_COMPLETION_SIZE);
+        MockEndpoint mockOutA = getMockEndpoint("mock:outA");
+        mockOutA.expectedMessageCount(1);  // everything batched together
+        MockEndpoint mockOutB = getMockEndpoint("mock:outB");
+        mockOutB.expectedMessageCount(1);  // everything batched together
+
+        template.sendBody("direct:in", generateStrings(messageCount));
+        assertMockEndpointsSatisfied();
+
+        assertFirstMessageBodyOfLength(mockOutA, messageCount);
+        assertFirstMessageBodyOfLength(mockOutB, messageCount);
+    }
+
+    private void assertFirstMessageBodyOfLength(MockEndpoint mockEndpoint, int expectedLength) {
+        Exchange exchange = mockEndpoint.getExchanges().get(0);
+        assertEquals(expectedLength, exchange.getIn().getBody(List.class).size());
     }
 
     private String getQueueName() {

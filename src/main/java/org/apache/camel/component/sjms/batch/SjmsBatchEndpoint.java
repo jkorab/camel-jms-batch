@@ -27,7 +27,7 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
     private String destinationName;
 
     @UriParam(label = "consumer", defaultValue = "1", description = "The number of JMS sessions to consume from")
-    private int consumerCount = 1;
+    private Integer consumerCount = 1;
 
     @UriParam(label = "consumer", defaultValue = "200",
             description = "The number of messages consumed at which the batch will be completed")
@@ -36,6 +36,10 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
     @UriParam(label = "consumer", defaultValue = "500",
             description = "The timeout from receipt of the first first message when the batch will be completed")
     private Integer completionTimeout = DEFAULT_COMPLETION_TIMEOUT;
+
+    @UriParam(label = "consumer", defaultValue = "1000",
+            description = "The duration in milliseconds of each poll for messages. completionTimeOut will override if it is shorter.")
+    private Integer pollDuration = 1000;
 
     @Metadata(required = "true")
     @UriParam(label = "consumer", description = "A #-reference to an AggregationStrategy visible to Camel")
@@ -50,7 +54,7 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
 
     @Override
     public boolean isSingleton() {
-        return false;
+        return true;
     }
 
     @Override
@@ -95,12 +99,19 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
         this.destinationName = destinationName;
     }
 
-    public int getConsumerCount() {
+    public Integer getConsumerCount() {
         return consumerCount;
     }
 
-    public void setConsumerCount(int consumerCount) {
+    public void setConsumerCount(Integer consumerCount) {
         this.consumerCount = consumerCount;
     }
 
+    public Integer getPollDuration() {
+        return pollDuration;
+    }
+
+    public void setPollDuration(Integer pollDuration) {
+        this.pollDuration = pollDuration;
+    }
 }

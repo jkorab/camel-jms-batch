@@ -17,7 +17,7 @@ import java.io.StringWriter;
 import java.util.Date;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,17 +32,20 @@ public class SjmsBatchConsumer extends DefaultConsumer {
 
     private final SjmsBatchEndpoint sjmsBatchEndpoint;
     private final AggregationStrategy aggregationStrategy;
+
     private final int completionSize;
     private final int completionTimeout;
     private final int consumerCount;
+    private final int pollDuration;
+
     private final ConnectionFactory connectionFactory;
     private final String destinationName;
     private final Processor processor;
-    private final int pollDuration = 100;
 
     private static AtomicInteger batchCount = new AtomicInteger();
     private static AtomicLong messagesReceived = new AtomicLong();
     private static AtomicLong messagesProcessed = new AtomicLong();
+    private ExecutorService jmsConsumerExecutors;
 
     public SjmsBatchConsumer(SjmsBatchEndpoint sjmsBatchEndpoint, Processor processor) {
         super(sjmsBatchEndpoint, processor);
@@ -54,6 +57,10 @@ public class SjmsBatchConsumer extends DefaultConsumer {
 
         completionSize = sjmsBatchEndpoint.getCompletionSize();
         completionTimeout = sjmsBatchEndpoint.getCompletionTimeout();
+        pollDuration = sjmsBatchEndpoint.getPollDuration();
+        if (pollDuration < 0) {
+            throw new IllegalArgumentException("pollDuration must be 0 or greater");
+        }
 
         this.aggregationStrategy = ObjectHelper.notNull(sjmsBatchEndpoint.getAggregationStrategy(), "aggregationStrategy");
 
@@ -92,10 +99,8 @@ public class SjmsBatchConsumer extends DefaultConsumer {
         LOG.info("Starting {} consumer(s) for {}:{}", consumerCount, destinationName, completionSize);
         consumersShutdownLatchRef.set(new CountDownLatch(consumerCount));
 
-        // TODO may not like multiple consumers being spun up; test
-        // executorService = getEndpoint().getCamelContext().getExecutorServiceManager()
-        //        .newFixedThreadPool(this, "SjmsBatchConsumer", concurrentConsumers);
-        ExecutorService jmsConsumerExecutors = Executors.newFixedThreadPool(consumerCount);
+        jmsConsumerExecutors = getEndpoint().getCamelContext().getExecutorServiceManager()
+                .newFixedThreadPool(this, "SjmsBatchConsumer", consumerCount);
         for (int i = 0; i < consumerCount; i++) {
             jmsConsumerExecutors.execute(new BatchConsumptionLoop());
         }
@@ -108,19 +113,24 @@ public class SjmsBatchConsumer extends DefaultConsumer {
         CountDownLatch consumersShutdownLatch = consumersShutdownLatchRef.get();
         if (consumersShutdownLatch != null) {
             LOG.info("Stop signalled, waiting on consumers to shut down");
-            consumersShutdownLatch.await();
-            LOG.info("All consumers have shut down");
+            if (consumersShutdownLatch.await(60, TimeUnit.SECONDS)) {
+                LOG.warn("Timeout waiting on consumer threads to signal completion - shutting down");
+            } else {
+                LOG.info("All consumers have shut down");
+            }
         } else {
             LOG.info("Stop signalled while there are no consumers yet, so no need to wait for consumers");
         }
 
         try {
-            LOG.debug("Shutting down connection");
+            LOG.debug("Shutting down JMS connection");
             connection.close();
         } catch (JMSException jex) {
             LOG.error("Exception caught closing connection: {}", getStackTrace(jex));
         }
 
+        getEndpoint().getCamelContext().getExecutorServiceManager()
+                .shutdown(jmsConsumerExecutors);
     }
 
     private String getStackTrace(Exception ex) {
@@ -182,7 +192,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                 while ((completionSize <= 0) || (messageCount < completionSize)) {
                     // check periodically to see whether we should be shutting down
                     long waitTime = (usingTimeout)
-                            ? getWaitTime(timeElapsed)
+                            ? getReceiveWaitTime(timeElapsed)
                             : pollDuration;
                     Message message = consumer.receive(waitTime);
 
@@ -228,7 +238,12 @@ public class SjmsBatchConsumer extends DefaultConsumer {
             }
         }
 
-        private long getWaitTime(long timeElapsed) {
+        /**
+         * Determine the time that a call to {@link MessageConsumer#receive()} should wait given the time that has elapsed for this batch.
+         * @param timeElapsed The time that has elapsed.
+         * @return The shorter of the time remaining or poll duration.
+         */
+        private long getReceiveWaitTime(long timeElapsed) {
             long timeRemaining = getTimeRemaining(timeElapsed);
 
             // wait for the shorter of the time remaining or the poll duration
