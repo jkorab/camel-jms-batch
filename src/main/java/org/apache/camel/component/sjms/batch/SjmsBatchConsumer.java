@@ -191,7 +191,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                 batch:
                 while ((completionSize <= 0) || (messageCount < completionSize)) {
                     // check periodically to see whether we should be shutting down
-                    long waitTime = (usingTimeout)
+                    long waitTime = (usingTimeout && (timeElapsed > 0))
                             ? getReceiveWaitTime(timeElapsed)
                             : pollDuration;
                     Message message = consumer.receive(waitTime);
@@ -258,7 +258,7 @@ public class SjmsBatchConsumer extends DefaultConsumer {
 
         private long getTimeRemaining(long timeElapsed) {
             long timeRemaining = completionTimeout - timeElapsed;
-            if (timeElapsed > 0) {
+            if (LOG.isDebugEnabled() && (timeElapsed > 0)) {
                 LOG.debug("Time remaining this batch: {}", timeRemaining);
             }
             return timeRemaining;
@@ -277,7 +277,6 @@ public class SjmsBatchConsumer extends DefaultConsumer {
                 LOG.debug("Completed processing[{}]:total={}", id, messagesProcessed.addAndGet(batchSize));
             } catch (Exception e) {
                 LOG.error("Error processing exchange: {}", e.getMessage());
-                exchange.setException(e);
             }
         }
 

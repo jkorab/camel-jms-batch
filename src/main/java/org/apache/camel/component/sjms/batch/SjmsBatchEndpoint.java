@@ -17,7 +17,6 @@ import org.apache.camel.spi.UriPath;
 @UriEndpoint(scheme = "sjmsBatch", title = "Simple JMS Batch Component", syntax = "sjms-batch:destinationName?aggregationStrategy=#aggStrategy", consumerClass = SjmsBatchComponent.class, label = "messaging")
 public class SjmsBatchEndpoint extends DefaultEndpoint {
 
-
     public static final int DEFAULT_COMPLETION_SIZE = 200; // the default dispatch queue size in ActiveMQ
     public static final int DEFAULT_COMPLETION_TIMEOUT = 500;
     public static final String PROPERTY_BATCH_SIZE = "CamelSjmsBatchSize";
@@ -38,7 +37,8 @@ public class SjmsBatchEndpoint extends DefaultEndpoint {
     private Integer completionTimeout = DEFAULT_COMPLETION_TIMEOUT;
 
     @UriParam(label = "consumer", defaultValue = "1000",
-            description = "The duration in milliseconds of each poll for messages. completionTimeOut will override if it is shorter.")
+            description = "The duration in milliseconds of each poll for messages. " +
+                    "completionTimeOut will be used if it is shorter and a batch has started.")
     private Integer pollDuration = 1000;
 
     @Metadata(required = "true")
